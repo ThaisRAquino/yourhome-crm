@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block titulo %}Distribuir protocolo{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>Distribuir protocolo</h1>
+    <div class="muted">Lance o protocolo do Anapro e envie para o analista. O prazo conta a partir do horário da solicitação:
+      <b>LEAD {{ SLA_MIN.LEAD }} min</b> · <b>MESA {{ SLA_MIN.MESA }} min</b>.</div></div>
+  <a class="btn claro" href="{{ url_for('fila') }}">Ver fila</a>
+</div>
+
+<div class="grid2" style="grid-template-columns:1.1fr 1fr;align-items:start">
+<form method="post" class="fsec magenta" autocomplete="off">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  {% if existente %}
+  <input type="hidden" name="redistribuir" value="{{ existente.id }}">
+  <div class="ja-existe">
+    <b>Protocolo {{ existente.protocolo }} já cadastrado.</b> Os dados serão puxados do histórico, sem precisar cadastrar de novo.
+    <div class="muted" style="margin-top:4px">Análise nº {{ existente.id }} · {{ existente.compradores or 'sem comprador' }}{% if existente.empreendimento %} · {{ existente.empreendimento }}{% endif %}
+      · último analista: <b>{{ existente.analista_nome }}</b> · parecer: <b>{{ existente.status }}</b>{% if existente.motivo_reprova %} ({{ existente.motivo_reprova }}){% endif %}
+      · finalizada {{ existente.concluido_em|hora }} · <a href="{{ url_for('analise_ver', aid=existente.id) }}" target="_blank">ver análise</a></div>
+    <div style="margin-top:6px">Confira o <b>novo horário de solicitação</b>, o tipo e o analista, e clique em <b>Confirmar redistribuição</b>.</div>
+  </div>
+  {% endif %}
+  <div id="aviso-prot"></div>
+  <div class="fg" style="grid-template-columns:1fr 1fr">
+    <div><label>Nº do protocolo (Anapro)</label><input name="protocolo" id="prot" required autofocus value="{{ f.protocolo }}"></div>
+    <div><label>Solicitado em</label><input type="datetime-local" name="solicitado_em" id="sol" required value="{{ f.solicitado_em }}"></div>
+    <div style="grid-column:span 2"><label>Tipo</label>
+      <div class="radio-tipo">
+        <label><input type="radio" name="tipo" value="LEAD" {{ 'checked' if f.tipo != 'MESA' }}>LEAD · prazo {{ SLA_MIN.LEAD }} min</label>
+        <label><input type="radio" name="tipo" value="MESA" {{ 'checked' if f.tipo == 'MESA' }}>MESA · prioridade, {{ SLA_MIN.MESA }} min</label>
+      </div></div>
+    <div style="grid-column:span 2"><label>Enviar para</label>
+      <select name="analista_id" required>
+        <option value="">Escolha o analista…</option>
+        {% for a in analistas %}<option value="{{ a.id }}" {{ 'selected' if f.analista_id == a.id|string }}>{{ a.nome }}{% if a.perfil != 'analista' %} ({{ PERFIS[a.perfil] }}){% endif %} · {{ a.fila }} na fila{% if a.mesas %}, {{ a.mesas }} MESA{% endif %}</option>{% endfor %}
+      </select></div>
+    <div><label>Cliente (opcional)</label><input name="cliente" value="{{ f.cliente }}"></div>
+    <div><label>Empreendimento (opcional)</label><input name="empreendimento" value="{{ f.empreendimento }}"></div>
+    <div style="grid-column:span 2"><label>Observação para o analista (opcional)</label><textarea name="obs" rows="2">{{ f.obs }}</textarea></div>
+  </div>
+  <div class="acoes" style="margin-top:14px"><button class="btn">{{ 'Confirmar redistribuição' if existente else 'Distribuir' }}</button>
+    <span class="muted" style="font-size:12px">O analista vê o protocolo na fila dele na hora, com o seu nome como responsável pela distribuição.</span></div>
+</form>
+
+<div class="cartao">
+  <h2>Últimas distribuições</h2>
+  {% if recentes %}
+  <div class="tabela-wrap"><table class="t">
+    <thead><tr><th>Protocolo</th><th>Analista</th><th>Solicitado</th><th>SLA</th></tr></thead>
+    <tbody>
+    {% for r in recentes %}{% set s = sla(r) %}
+      <tr class="link" onclick="location.href='{{ url_for('analise_ver', aid=r.id) }}'">
+        <td><b>{{ r.protocolo }}</b> <span class="tipo {{ r.tipo }}">{{ r.tipo }}</span><div class="muted" style="font-size:11px">por {{ r.distribuidor_nome }}</div></td>
+        <td>{{ r.analista_nome }}</td><td class="nowrap">{{ r.solicitado_em|hora }}</td>
+        <td>{% if s %}<span class="sla {{ s.cor }}">{{ s.rotulo }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% else %}<div class="muted">Nenhum protocolo distribuído ainda.</div>{% endif %}
+</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const s=document.getElementById('sol');
+if(!s.value){const d=new Date();d.setSeconds(0,0);const p=n=>String(n).padStart(2,'0');
+  s.value=`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;}
+// consulta se o protocolo já existe assim que ele é digitado
+const pr=document.getElementById('prot'),av=document.getElementById('aviso-prot');
+const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function consulta(){
+  const v=pr.value.trim();if(!v||document.querySelector('[name=redistribuir]')){av.innerHTML='';return}
+  try{const r=await fetch('{{ url_for('distribuir_consulta') }}?protocolo='+encodeURIComponent(v));const j=await r.json();
+    if(!j.existe){av.innerHTML='';return}
+    av.innerHTML=j.aberto
+      ?`<div class="ja-existe bad"><b>Protocolo ${esc(v)} em andamento</b> com ${esc(j.analista)} (análise nº ${j.id}). Para trocar o analista, use <b>Transferir</b> na fila. <a href="${j.url}" target="_blank">ver</a></div>`
+      :`<div class="ja-existe"><b>Protocolo ${esc(v)} já cadastrado</b> (${j.vezes}x). Último parecer: <b>${esc(j.status)}</b>${j.motivo?' ('+esc(j.motivo)+')':''} com ${esc(j.analista)}, finalizado ${esc(j.finalizado)}. Ao distribuir, os dados serão puxados do histórico. <a href="${j.url}" target="_blank">ver</a></div>`;
+  }catch(e){}
+}
+pr.addEventListener('change',consulta);pr.addEventListener('blur',consulta);
+</script>
+{% endblock %}

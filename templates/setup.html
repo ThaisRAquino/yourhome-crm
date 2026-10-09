@@ -1,0 +1,14 @@
+{% extends "login_base.html" %}
+{% block titulo %}Configuração inicial{% endblock %}
+{% block conteudo %}
+<h2 style="text-align:center;color:var(--roxo)">Configuração inicial</h2>
+<p class="muted" style="text-align:center;margin-top:-4px">Cadastre o Diretor. Depois ele cria os demais usuários.</p>
+<form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="campo"><label>Nome completo</label><input name="nome" required value="{{ request.form.nome }}"></div>
+  <div class="campo"><label>CPF</label><input name="cpf" data-cpf inputmode="numeric" required value="{{ request.form.cpf }}"></div>
+  <div class="campo"><label>E-mail (opcional)</label><input name="email" type="email" value="{{ request.form.email }}"></div>
+  <button class="btn verde">Criar Diretor</button>
+</form>
+<p class="dica">A senha inicial será <b>abc123</b>, e a troca é pedida no primeiro acesso.</p>
+{% endblock %}

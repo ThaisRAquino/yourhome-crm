@@ -1,0 +1,15 @@
+{% extends "login_base.html" %}
+{% block titulo %}Alterar senha{% endblock %}
+{% block conteudo %}
+<h2 style="text-align:center;color:var(--roxo)">{{ 'Crie sua senha pessoal' if obrigatoria else 'Alterar senha' }}</h2>
+{% if obrigatoria %}<p class="muted" style="text-align:center;margin-top:-4px">Olá, {{ usuario.nome.split(' ')[0] }}! Por segurança, troque a senha padrão antes de continuar.</p>{% endif %}
+<form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="campo"><label>Senha atual</label><input name="atual" type="password" autocomplete="current-password" required></div>
+  <div class="campo"><label>Nova senha</label><input name="nova" type="password" autocomplete="new-password" minlength="8" required></div>
+  <div class="campo"><label>Confirme a nova senha</label><input name="confirma" type="password" autocomplete="new-password" minlength="8" required></div>
+  <ul class="regras"><li>Mínimo de 8 caracteres, com letras e números</li><li>Diferente da senha padrão e do seu CPF</li></ul>
+  <button class="btn verde">Salvar nova senha</button>
+</form>
+<p class="dica">{% if obrigatoria %}<a href="{{ url_for('logout') }}">Sair</a>{% else %}<a href="{{ url_for('inicio') }}">Voltar</a>{% endif %}</p>
+{% endblock %}

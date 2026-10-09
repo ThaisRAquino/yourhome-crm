@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block conteudo %}
+<div class="cartao vazio">
+  <h1>{{ titulo }}</h1>
+  <p>{{ msg }}</p>
+  <a class="btn claro" href="{{ url_for('inicio') if usuario else url_for('login') }}">Voltar ao início</a>
+</div>
+{% endblock %}

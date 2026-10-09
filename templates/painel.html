@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block titulo %}Painel da equipe{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>Painel de controle da equipe</h1><div class="muted">Produção de {{ de|data }} a {{ ate|data }}</div></div>
+  <form class="filtros" method="get">
+    <div><label>De</label><input type="date" name="de" value="{{ de }}"></div>
+    <div><label>Até</label><input type="date" name="ate" value="{{ ate }}"></div>
+    <button class="btn roxo">Aplicar</button>
+    <a class="btn claro" href="{{ url_for('exportar_csv', de=de, ate=ate) }}">Exportar CSV</a>
+  </form>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><small>Análises no período</small><b>{{ kpi.periodo }}</b><span>pela data de emissão</span></div>
+  <div class="kpi"><small>Aprovadas no período</small><b>{{ kpi.aprovadas }}</b><span>incl. condicionais</span></div>
+  <div class="kpi"><small>Reprovadas no período</small><b>{{ kpi.reprovadas }}</b><span>&nbsp;</span></div>
+  <div class="kpi"><small>Em análise agora</small><b>{{ kpi.em_analise }}</b><span>todas as datas</span></div>
+  <div class="kpi"><small>Pendentes de documentação</small><b>{{ kpi.pendentes }}</b><span>todas as datas</span></div>
+  <div class="kpi"><small>Volume aprovado · {{ kpi.mes_rotulo }}</small><b style="font-size:20px">{{ kpi.volume_mes|brl }}</b><span>{{ kpi.aprovadas_mes }} aprovada(s) no mês até agora · zera todo dia 1º</span></div>
+</div>
+
+<div class="cartao">
+  <div class="cab" style="margin-bottom:10px"><h2 style="margin:0">SLA dos protocolos</h2><a class="btn claro peq" href="{{ url_for('fila') }}">Abrir fila completa</a></div>
+  <div class="kpis" style="margin-bottom:12px">
+    <div class="kpi"><small>Na fila agora</small><b>{{ sla_agora.total }}</b><span>aguardando parecer</span></div>
+    <div class="kpi mesa"><small>MESA abertas</small><b>{{ sla_agora.mesas }}</b><span>prazo {{ SLA_MIN.MESA }} min</span></div>
+    <div class="kpi azul"><small>No prazo</small><b>{{ sla_agora.no_prazo }}</b><span>agora</span></div>
+    <div class="kpi amarelo"><small>Prestes a atrasar</small><b>{{ sla_agora.alerta }}</b><span>agora</span></div>
+    <div class="kpi vermelho"><small>Atrasados</small><b>{{ sla_agora.atrasado }}</b><span>agora</span></div>
+  </div>
+  <div class="tabela-wrap"><table class="t">
+    <thead><tr><th>No período</th><th class="num">Finalizados</th><th class="num">No prazo</th><th class="num">% no prazo</th><th class="num">SLA médio</th><th class="num">Tempo médio de análise</th><th class="num">Meta</th></tr></thead>
+    <tbody>
+    {% for k, rot in [('LEAD','LEAD'),('MESA','MESA'),('TOTAL','Total')] %}{% set x = sla_periodo[k] %}
+      <tr><td>{% if k != 'TOTAL' %}<span class="tipo {{ k }}">{{ rot }}</span>{% else %}<b>Total</b>{% endif %}</td>
+        <td class="num">{{ x.n }}</td><td class="num">{{ x.no_prazo }}</td>
+        <td class="num">{% if x.pct is not none %}<span class="sla {{ 'azul' if x.pct >= 90 else ('amarelo' if x.pct >= 75 else 'vermelho') }}">{{ '%.0f'|format(x.pct) }}%</span>{% else %}—{% endif %}</td>
+        <td class="num"><b>{{ x.medio|minutos }}</b></td><td class="num">{{ x.analise|minutos }}</td><td class="num muted">{{ (SLA_MIN[k]|string + ' min') if k != 'TOTAL' else '' }}</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% if fila_agora %}
+  <h3 style="margin:16px 0 8px;font-size:13px;color:var(--suave);text-transform:uppercase">Próximos a vencer</h3>
+  {% for r, s in fila_agora %}
+    <div class="alerta"><span class="sla {{ s.cor }}">{{ s.rotulo }}</span>
+      <div style="flex:1"><span class="tipo {{ s.tipo }}">{{ s.tipo }}</span> <a href="{{ url_for('analise_ver', aid=r.id) }}"><b>{{ r.protocolo }}</b></a>
+        <span class="muted"> · {{ r.analista_nome }}{% if r.distribuidor_nome %} · por {{ r.distribuidor_nome }}{% endif %}</span></div>
+      <div class="right nowrap" style="font-size:13px">{% if s.restante_seg >= 0 %}faltam {{ (s.restante_seg/60)|minutos }}{% else %}atrasado há {{ (-s.restante_seg/60)|minutos }}{% endif %}</div>
+    </div>
+  {% endfor %}
+  {% endif %}
+</div>
+
+<div class="cartao" style="padding:0">
+  <div style="padding:16px 18px 0"><h2>Produção por analista</h2></div>
+  <div class="tabela-wrap">
+  {% if equipe %}
+  <table class="t">
+    <thead><tr><th>Analista</th><th class="num">Análises</th><th style="width:22%"></th><th class="num">Aprovadas</th><th class="num">Reprovadas</th>
+      <th>Em andamento</th><th class="num">Na fila</th><th class="num">Tempo médio de análise</th><th class="num">SLA médio</th><th class="num">% no prazo</th><th class="num">Volume aprovado ({{ kpi.mes_rotulo }})</th><th>Último acesso</th><th></th></tr></thead>
+    <tbody>
+    {% for e in equipe %}
+      <tr>
+        <td><b>{{ e.nome }}</b>{% if e.perfil != 'analista' %} <span class="muted">({{ PERFIS[e.perfil] }})</span>{% endif %}</td>
+        <td class="num"><b>{{ e.total }}</b></td>
+        <td><div class="mini" title="{{ e.total }} análise(s)"><div style="width:{{ (e.total / maior * 100)|round(1) }}%"></div></div></td>
+        <td class="num">{{ e.aprovadas }}</td><td class="num">{{ e.reprovadas }}</td>
+        <td>{% for x in e.andamento %}{% set t = tempo_analise(x) %}<a href="{{ url_for('analise_ver', aid=x.id) }}" class="nowrap"><span class="tipo {{ x.tipo }}">{{ x.tipo }}</span> {{ x.protocolo or x.id }}</a> <span class="muted nowrap">há {{ t.minutos|minutos }}</span><br>{% else %}<span class="muted">—</span>{% endfor %}</td>
+        <td class="num">{{ e.fila }}{% if e.fila_mesas %} <span class="tipo MESA">{{ e.fila_mesas }} MESA</span>{% endif %}{% if e.fila_atrasados %} <span class="sla vermelho">{{ e.fila_atrasados }} atras.</span>{% endif %}</td>
+        <td class="num">{{ e.analise_medio|minutos if e.analise_n else '—' }}</td>
+        <td class="num">{{ e.sla_medio|minutos if e.sla_n else '—' }}</td>
+        <td class="num">{% if e.sla_pct is not none %}<span class="sla {{ 'azul' if e.sla_pct >= 90 else ('amarelo' if e.sla_pct >= 75 else 'vermelho') }}">{{ '%.0f'|format(e.sla_pct) }}%</span>{% else %}—{% endif %}</td>
+        <td class="num">{{ e.volume|brl }}</td>
+        <td class="muted nowrap">{{ e.ultimo|datahora }}</td>
+        <td><a href="{{ url_for('analises', analista=e.id, de=de, ate=ate) }}">Ver</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<div class="vazio">Nenhum analista cadastrado ainda.</div>{% endif %}
+  </div>
+</div>
+
+<div class="cartao">
+  <h2>Pontos de atenção {% if n_alertas %}<span class="chip st-pendente">{{ n_alertas }}</span>{% endif %}</h2>
+  {% if alertas %}
+    {% for ordem, r, texto, cls in alertas %}
+    <div class="alerta"><span class="dot {{ cls }}"></span>
+      <div style="flex:1"><a href="{{ url_for('analise_ver', aid=r.id) }}"><b>Nº {{ r.id }} · {{ r.compradores or 'Sem comprador' }}</b></a>
+        <div class="muted" style="font-size:12px">{{ r.empreendimento or '—' }} · {{ r.analista_nome }}</div></div>
+      <div class="right" style="font-size:13px">{{ texto }}</div>
+    </div>
+    {% endfor %}
+  {% else %}<div class="muted">Nada pendente: nenhum SICAQ vencendo em 30 dias e nenhuma análise parada há 5 dias ou mais.</div>{% endif %}
+</div>
+{% endblock %}

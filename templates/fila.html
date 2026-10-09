@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Fila' if NIVEL[usuario.perfil] >= 2 else 'Minha fila' }}{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>{{ 'Fila de protocolos' if NIVEL[usuario.perfil] >= 2 else 'Minha fila' }}</h1>
+    <div class="legenda">
+      <span class="sla azul">No prazo</span>
+      <span class="sla amarelo">Prestes a atrasar</span>
+      <span class="sla vermelho">Atrasado</span>
+      <span>LEAD {{ SLA_MIN.LEAD }} min (amarelo nos últimos {{ SLA_AVISO_MIN.LEAD }}) · MESA {{ SLA_MIN.MESA }} min (amarelo nos últimos {{ SLA_AVISO_MIN.MESA }})</span>
+    </div></div>
+  <div class="acoes">
+    {% if analistas %}
+    <form method="get" class="filtros"><select name="analista" onchange="this.form.submit()"><option value="">Todos os analistas</option>
+      {% for a in analistas %}<option value="{{ a.id }}" {{ 'selected' if filtro == a.id|string }}>{{ a.nome }} ({{ a.fila }})</option>{% endfor %}</select></form>
+    <a class="btn verde" href="{{ url_for('distribuir') }}">+ Distribuir protocolo</a>
+    {% endif %}
+    <button class="btn claro" id="btnAviso" type="button" hidden>Ativar avisos no computador</button>
+  </div>
+</div>
+
+{% if andamento %}
+{% set at = andamento[0] %}
+<div class="andamento-box">
+  <div><small>EM ANDAMENTO</small><b>Protocolo {{ at.protocolo or ('nº %s'|format(at.id)) }}</b> <span class="tipo {{ at.tipo }}">{{ at.tipo }}</span>
+    <div class="muted" style="font-size:12px">Iniciado {{ at.iniciado_em|hora }}. Finalize este protocolo antes de iniciar outro (só MESA pode entrar na frente).</div></div>
+  <a class="btn" href="{{ url_for('analise_editar', aid=at.id) }}">Continuar análise</a>
+</div>
+{% endif %}
+{% if mesas %}
+<div class="alerta-mesa"><span>⚠</span>{{ mesas }} protocolo(s) de MESA na fila: prioridade, prazo de {{ SLA_MIN.MESA }} minutos.</div>
+{% endif %}
+
+<div class="kpis">
+  <div class="kpi"><small>Na fila</small><b>{{ itens|length }}</b><span>aguardando parecer</span></div>
+  <div class="kpi mesa"><small>MESA</small><b>{{ mesas }}</b><span>prioridade</span></div>
+  <div class="kpi azul"><small>No prazo</small><b>{{ cont.no_prazo }}</b><span>&nbsp;</span></div>
+  <div class="kpi amarelo"><small>Prestes a atrasar</small><b>{{ cont.alerta }}</b><span>&nbsp;</span></div>
+  <div class="kpi vermelho"><small>Atrasados</small><b>{{ cont.atrasado }}</b><span>&nbsp;</span></div>
+  <div class="kpi"><small>Concluídos hoje</small><b>{{ resumo_hoje.n }}</b>
+    <span>{% if resumo_hoje.n %}{{ resumo_hoje.no_prazo }} no prazo · média {{ resumo_hoje.medio|minutos }}{% else %}&nbsp;{% endif %}</span></div>
+</div>
+
+<div id="lista">
+{% for r, s in itens %}
+  <div class="fila-item {{ s.cor }} {{ 'mesa' if s.tipo=='MESA' }}" data-id="{{ r.id }}" data-tipo="{{ s.tipo }}" data-prot="{{ r.protocolo }}"
+       data-rest="{{ s.restante_seg }}" data-aviso="{{ s.aviso_seg }}"{% set t = tempo_analise(r) %}{% if t %} data-an="{{ t.segundos }}"{% endif %}>
+    <div class="relogio"><span class="t"></span><small class="st">{{ s.rotulo }}</small></div>
+    <div class="info">
+      <div><span class="tipo {{ s.tipo }}">{{ s.tipo }}</span>
+        <a href="{{ url_for('analise_ver', aid=r.id) }}"><b>Protocolo {{ r.protocolo or ('nº %s'|format(r.id)) }}</b></a>
+        {% if r.compradores %} · {{ r.compradores }}{% endif %}{% if r.empreendimento %} · <span class="muted">{{ r.empreendimento }}</span>{% endif %}</div>
+      <div class="meta">Solicitado {{ r.solicitado_em|hora }} · prazo até {{ s.prazo_em|hora }}
+        {% if r.distribuidor_nome %} · distribuído por <b>{{ r.distribuidor_nome }}</b>{% endif %}
+        {% if NIVEL[usuario.perfil] >= 2 %} · analista: <b>{{ r.analista_nome }}</b>{% endif %}
+        {% if r.status != 'Em análise' %} · {{ r.status }}{% endif %}</div>
+      <div class="meta">{% if t %}<span class="andando">▶ Em análise há <b class="an"></b></span> · iniciada {{ r.iniciado_em|hora }}{% else %}<span class="muted">⏸ Aguardando início</span>{% endif %}</div>
+    </div>
+    <div class="acoes">
+      {% if NIVEL[usuario.perfil] >= 2 %}
+      <form method="post" action="{{ url_for('analise_mesa', aid=r.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}">
+        <button class="btn claro peq">{{ 'Voltar p/ LEAD' if s.tipo=='MESA' else 'Marcar MESA' }}</button></form>
+      <form method="post" action="{{ url_for('analise_transferir', aid=r.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}">
+        <select name="analista_id" onchange="if(this.value)this.form.submit()"><option value="">Transferir…</option>
+          {% for a in analistas if a.id != r.analista_id %}<option value="{{ a.id }}">{{ a.nome }} ({{ a.fila }})</option>{% endfor %}</select></form>
+      {% endif %}
+      {% if r.analista_id == usuario.id %}
+        {% if r.iniciado_em %}<a class="btn peq" href="{{ url_for('analise_editar', aid=r.id) }}">Continuar</a>
+        {% elif bloqueado and s.tipo != 'MESA' %}<button class="btn peq" disabled title="Finalize o protocolo em andamento primeiro" style="opacity:.45;cursor:not-allowed">Iniciar</button>
+        {% else %}<form method="post" action="{{ url_for('analise_iniciar', aid=r.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn verde peq">▶ Iniciar</button></form>{% endif %}
+      {% elif NIVEL[usuario.perfil] >= 2 %}<a class="btn claro peq" href="{{ url_for('analise_ver', aid=r.id) }}">Ver</a>{% endif %}
+    </div>
+  </div>
+{% else %}
+  <div class="cartao vazio">Nenhum protocolo aguardando parecer. 🎉</div>
+{% endfor %}
+</div>
+<p class="muted" style="font-size:12px">O SLA conta desde a solicitação no Anapro. O tempo de análise conta a partir do <b>Iniciar</b>. Os dois param quando o analista clica em <b>Finalizar</b>. A página se atualiza sozinha a cada minuto.</p>
+{% endblock %}
+{% block scripts %}
+<script>
+// contagem regressiva ao vivo e troca de cor
+const pad=n=>String(n).padStart(2,'0');
+const fmt=s=>{s=Math.abs(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return (h?h+':'+pad(m):m)+':'+pad(x)};
+const itens=[...document.querySelectorAll('.fila-item')];
+function tick(){
+  itens.forEach(el=>{
+    const r=+el.dataset.rest, av=+el.dataset.aviso;
+    const cor=r<0?'vermelho':(r<=av?'amarelo':'azul');
+    el.classList.remove('azul','amarelo','vermelho');el.classList.add(cor);
+    el.querySelector('.t').textContent=(r<0?'+':'')+fmt(r);
+    el.querySelector('.st').textContent=r<0?'Atrasado':(r<=av?'Prestes a atrasar':'Restante');
+    el.dataset.rest=r-1;
+    if(el.dataset.an!==undefined){const a=+el.dataset.an;const b=el.querySelector('.an');if(b)b.textContent=fmt(a);el.dataset.an=a+1;}
+  });
+}
+tick();setInterval(tick,1000);
+
+// aviso de protocolo novo (som + notificação)
+function bip(mesa){try{const c=new (window.AudioContext||window.webkitAudioContext)();
+  [0,.25,mesa?.5:null].filter(x=>x!==null).forEach(t=>{const o=c.createOscillator(),g=c.createGain();o.frequency.value=mesa?988:740;
+  o.connect(g);g.connect(c.destination);g.gain.setValueAtTime(.2,c.currentTime+t);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+t+.2);
+  o.start(c.currentTime+t);o.stop(c.currentTime+t+.22)})}catch(e){}}
+function toast(txt,mesa){const d=document.createElement('div');d.className='toast'+(mesa?' mesa':'');d.textContent=txt;document.body.appendChild(d);setTimeout(()=>d.remove(),8000)}
+let vistos=null;try{vistos=JSON.parse(sessionStorage.getItem('fila_vistos'))}catch(e){}
+const ids=itens.map(e=>e.dataset.id);
+if(Array.isArray(vistos)){
+  const novos=itens.filter(e=>!vistos.includes(e.dataset.id));
+  if(novos.length){
+    const mesa=novos.some(e=>e.dataset.tipo==='MESA');
+    const txt=novos.length===1?`Novo protocolo ${novos[0].dataset.prot} (${novos[0].dataset.tipo})`:`${novos.length} novos protocolos na fila`;
+    toast(txt+(mesa?': MESA, prioridade!':''),mesa);bip(mesa);
+    try{if(Notification.permission==='granted')new Notification('Your Home · '+txt,{body:mesa?'MESA: prazo de {{ SLA_MIN.MESA }} minutos':'Prazo de {{ SLA_MIN.LEAD }} minutos'})}catch(e){}
+  }
+}
+try{sessionStorage.setItem('fila_vistos',JSON.stringify(ids))}catch(e){}
+const b=document.getElementById('btnAviso');
+try{if('Notification' in window&&Notification.permission==='default'){b.hidden=false;b.onclick=()=>Notification.requestPermission().then(()=>b.hidden=true)}}catch(e){}
+// atualiza a cada minuto, se ninguém estiver usando um campo
+setInterval(()=>{const a=document.activeElement;if(!a||a===document.body)location.reload()},60000);
+</script>
+{% endblock %}

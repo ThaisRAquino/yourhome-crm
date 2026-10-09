@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block titulo %}Análise nº {{ a.id }}{% endblock %}
+{% macro F(l, v) -%}<div><label>{{ l }}</label><div class="v">{{ v if v else ' ' }}</div></div>{%- endmacro %}
+{% block conteudo %}
+{% set si = STATUS_INFO[a.status] %}
+<div class="cab">
+  <div><a href="{{ url_for('analises') }}">← Voltar</a><h1>Análise nº {{ a.id }}</h1></div>
+  <div class="acoes">
+    {% if NIVEL[usuario.perfil] >= 2 or not (a.solicitado_em and not a.iniciado_em and not a.concluido_em) %}<a class="btn claro" href="{{ url_for('analise_editar', aid=a.id) }}">Editar</a>{% endif %}
+    {% if NIVEL[usuario.perfil] >= 2 %}
+    <form method="post" action="{{ url_for('analise_duplicar', aid=a.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn claro">Duplicar</button></form>
+    <form method="post" action="{{ url_for('analise_excluir', aid=a.id) }}" onsubmit="return confirm('Excluir definitivamente a análise nº {{ a.id }}?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn perigo">Excluir</button></form>
+    {% endif %}
+    <button class="btn laranja" onclick="window.print()">Imprimir / PDF</button>
+  </div>
+</div>
+
+{% set s = sla(a) %}
+{% if a.protocolo or s or a.iniciado_em %}
+<div class="cartao noprint" style="max-width:1000px;margin:0 auto 16px;border-left:6px solid {{ 'var(--sla-%s)'|format(s.cor) if s else 'var(--linha)' }}">
+  <div class="protocolo-box">
+    <div><label>Protocolo Anapro</label><div class="v">{{ a.protocolo or '—' }} {% if s %}<span class="tipo {{ s.tipo }}">{{ s.tipo }}</span>{% endif %}</div></div>
+    <div><label>Solicitado em</label><div class="v">{{ a.solicitado_em|datahora }}</div></div>
+    {% if s %}
+    <div><label>Prazo ({{ s.prazo_min }} min)</label><div class="v">{{ s.prazo_em|datahora }}</div></div>
+    <div><label>SLA</label><div class="v"><span class="sla {{ s.cor }}">{{ s.rotulo }}</span>
+      <div class="muted" style="font-size:12px;font-weight:400;margin-top:3px">{{ 'Tempo total' if s.concluido else 'Decorrido' }}: {{ s.decorrido_min|minutos }}</div></div></div>
+    {% endif %}
+    <div><label>Distribuído por</label><div class="v">{{ a.distribuidor_nome or '—' }}</div>
+      {% if a.distribuido_em %}<div class="muted" style="font-size:12px">{{ a.distribuido_em|datahora }}</div>{% endif %}</div>
+    <div><label>Analista</label><div class="v">{{ a.analista_nome }}</div></div>
+    {% set t = tempo_analise(a) %}
+    <div><label>Tempo de análise</label><div class="v">{% if t %}{{ t.minutos|minutos }}{% if t.em_andamento %} <span class="muted" style="font-weight:400">(em andamento)</span>{% endif %}{% else %}<span class="muted" style="font-weight:400">não iniciada</span>{% endif %}</div>
+      {% if a.iniciado_em %}<div class="muted" style="font-size:12px">início {{ a.iniciado_em|hora }}{% if a.concluido_em %} · fim {{ a.concluido_em|hora }}{% endif %}</div>{% endif %}</div>
+  </div>
+  <div class="acoes" style="margin-top:12px">
+    {% if a.analista_id == usuario.id and not a.concluido_em %}
+      {% if a.iniciado_em %}<a class="btn" href="{{ url_for('analise_editar', aid=a.id) }}">Continuar análise</a>
+      {% elif a.solicitado_em %}<form method="post" action="{{ url_for('analise_iniciar', aid=a.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn verde">▶ Iniciar análise</button></form>{% endif %}
+    {% endif %}
+    {% if a.concluido_em and NIVEL[usuario.perfil] >= 2 %}
+      <form method="post" action="{{ url_for('analise_reabrir', aid=a.id) }}" onsubmit="return confirm('Reabrir esta análise? Ela volta para a fila e o tempo volta a contar.')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn claro peq">Reabrir</button></form>
+    {% endif %}
+    {% if a.origem_id %}<a class="muted" href="{{ url_for('analise_ver', aid=a.origem_id) }}" style="font-size:12px">Redistribuição · ver análise anterior nº {{ a.origem_id }}</a>{% endif %}
+  </div>
+  {% if NIVEL[usuario.perfil] >= 2 and s and not s.concluido %}
+  <div class="acoes" style="margin-top:12px;border-top:1px solid var(--linha);padding-top:12px">
+    <form method="post" action="{{ url_for('analise_mesa', aid=a.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="btn {{ 'claro' if s.tipo=='MESA' else 'roxo' }} peq">{{ 'Voltar para LEAD' if s.tipo=='MESA' else 'Marcar como MESA (30 min)' }}</button></form>
+    <form method="post" action="{{ url_for('analise_transferir', aid=a.id) }}" class="acoes"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <select name="analista_id" required style="padding:6px 8px;border:1px solid var(--linha);border-radius:6px"><option value="">Transferir para…</option>
+        {% for u in transferiveis if u.id != a.analista_id %}<option value="{{ u.id }}">{{ u.nome }} ({{ u.fila }} na fila)</option>{% endfor %}</select>
+      <button class="btn claro peq">Transferir</button></form>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="doc">
+  <div class="doc-h">
+    <span class="marca">{% if logo_existe %}<img src="{{ url_for('static', filename='logo.png') }}" alt="Your Home">{% else %}<span class="wm"><b>Your Home</b><span>CRÉDITO IMOBILIÁRIO</span></span>{% endif %}</span>
+    <div class="t"><b>ANÁLISE DE CRÉDITO</b><div>{% if a.protocolo %}Protocolo {{ a.protocolo }} · {% endif %}Nº {{ a.id }} · Emitido em {{ a.emissao|data }} &nbsp;|&nbsp; Analista: {{ a.analista_nome }}</div></div>
+  </div>
+  <div class="faixa-cores"><i style="background:var(--amarelo)"></i><i style="background:var(--verde)"></i><i style="background:var(--magenta)"></i><i style="background:var(--roxo)"></i></div>
+
+  <div class="banner {{ si[0] }}">{% if si[0]=='aprovado' %}✓ {% endif %}{{ si[1] }}{% if a.status == 'Reprovado' and a.motivo_reprova %}<div style="font-size:14px;font-weight:700;margin-top:4px;letter-spacing:.3px">MOTIVO: {{ a.motivo_reprova|upper }}</div>{% endif %}</div>
+
+  <div class="doc-grid">
+    <div>
+      <div class="box"><div class="bh laranja">DADOS DO IMÓVEL</div><div class="bb">
+        <div class="fl" style="grid-template-columns:1fr 1.5fr">{{ F('Construtora', d.imovel.construtora) }}{{ F('Empreendimento', d.imovel.empreendimento) }}</div>
+        <div class="fl" style="grid-template-columns:.6fr .6fr 1fr 1.2fr">{{ F('Torre', d.imovel.torre) }}{{ F('UH', d.imovel.uh) }}{{ F('Inclusão', d.imovel.inclusao|data) }}{{ F('Vl. avaliação', d.imovel.avaliacao|brl) }}</div>
+        <div class="fl" style="grid-template-columns:1fr 1fr">{{ F('Corretor', d.imovel.corretor) }}{{ F('Gerente', d.imovel.gerente) }}</div>
+        <div class="fl" style="grid-template-columns:1fr 1fr">{{ F('Superintendente', d.imovel.superintendente) }}{{ F('Diretor', d.imovel.diretor) }}</div>
+      </div></div>
+
+      <div class="box"><div class="bh roxo">COMPRADORES</div><div class="bb">
+        {% for c in d.compradores %}
+        <div class="buyer"><h4><span class="nbadge">{{ loop.index }}</span>{{ (c.nome or '—')|upper }}</h4>
+          <div class="fl" style="grid-template-columns:1.2fr 1fr 1fr">{{ F('CPF', c.cpf|cpf) }}{{ F('Nascimento', c.nascimento|data) }}{{ F('Renda total', c.renda|brl) }}</div>
+          <div class="fl" style="grid-template-columns:1fr 1fr">{{ F('Renda formal', c.formal|brl) }}{{ F('Renda informal', c.informal|brl) }}</div>
+        </div>
+        {% endfor %}
+        <div class="fam"><div class="l">RENDA TOTAL<br>FAMILIAR</div><div class="val">{{ d.renda_familiar|brl }}</div>{% if d.faixa %}<span class="faixa-his">{{ d.faixa }}</span>{% endif %}</div>
+      </div></div>
+    </div>
+
+    <div>
+      <div class="box"><div class="bh magenta">CONDIÇÕES DE FINANCIAMENTO</div><div class="bb">
+        <div class="cards">
+          {% for ic, k, v in [('F','Financiamento',d.fin.financiamento),('$','FGTS',d.fin.fgts),('S','Subsídio',d.fin.subsidio),('C','Cheque / próprios',d.fin.proprios),('P','Parcela mensal',d.fin.parcela)] %}
+          <div class="card"><div class="ic">{{ ic }}</div><div class="k">{{ k }}</div><div class="val">{{ v|brl }}</div></div>
+          {% endfor %}
+          <div class="card hl"><div class="ic">✓</div><div class="k">Total aprovado</div><div class="val">{{ d.total_aprovado|brl }}</div></div>
+        </div>
+        <div class="strip" style="grid-template-columns:1fr .8fr 1.8fr">
+          <div><label>Vencimento SICAQ</label><div class="v">{{ d.fin.vencimento|data }}</div></div>
+          <div><label>Prazo</label><div class="v">{{ d.fin.prazo }} meses</div></div>
+          <div><label>Status</label><div class="v"><span class="chip st-{{ si[0] }}">{{ a.status|upper }}</span></div></div>
+        </div>
+        <div class="strip" style="grid-template-columns:repeat(5,1fr)">
+          <div><label>Amortização</label><div class="v">{{ d.fin.amortizacao }}</div></div>
+          <div><label>Enquadramento</label><div class="v">{{ d.fin.enquadramento or '—' }}</div></div>
+          <div><label>Taxa de juros</label><div class="v">{{ d.fin.taxa or '—' }}</div></div>
+          <div><label>36 meses?</label><div class="v">{{ d.fin.meses36 }}</div></div>
+          <div><label>Dependente?</label><div class="v">{{ d.fin.dependente }}</div></div>
+        </div>
+      </div></div>
+
+      <div class="box"><div class="bh verde">PESQUISAS / COMPLIANCE</div><div class="bb"><div class="comp">
+        {% for l, k in [('Serasa','serasa'),('CADMUT','cadmut'),('CIWEB','ciweb'),('Subsídio','subsidio')] %}
+        {% set v = d.compliance[k] %}
+        <div class="{{ COMP_CLASS.get(v,'off') }}"><small>{{ l }}</small><b>{{ v|upper }}</b></div>
+        {% endfor %}
+      </div></div></div>
+
+      {% if d.obs %}
+      <div class="box"><div class="bh laranja2">OBSERVAÇÕES / CONDICIONANTES</div><div class="bb obs">{{ d.obs }}</div></div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="doc-rodape"><span>Your Home · Crédito Imobiliário</span><span>Atualizado em {{ a.atualizado_em|datahora }}</span></div>
+</div>
+
+{% if hist %}
+<div class="cartao hist">
+  <h2>Histórico</h2>
+  <ul class="muted" style="margin:0;padding-left:18px">
+  {% for h in hist %}<li><b>{{ h.em|datahora }}</b> · {{ h.nome or '(usuário excluído)' }}: {{ h.acao }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}

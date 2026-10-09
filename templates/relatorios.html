@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block titulo %}Relatórios gerais{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>Relatórios gerais</h1><div class="muted">Período de {{ de|data }} a {{ ate|data }} (pela data de emissão)</div></div>
+  <form class="filtros" method="get">
+    <div><label>De</label><input type="date" name="de" value="{{ de }}"></div>
+    <div><label>Até</label><input type="date" name="ate" value="{{ ate }}"></div>
+    {% if motivo_f %}<input type="hidden" name="motivo" value="{{ motivo_f }}">{% endif %}
+    <button class="btn roxo">Aplicar</button>
+    <a class="btn claro" href="{{ url_for('exportar_csv', de=de, ate=ate) }}">Exportar CSV</a>
+    <a class="btn claro" href="{{ url_for('backup') }}">Backup do banco</a>
+  </form>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><small>Análises</small><b>{{ kpi.total }}</b><span>{{ kpi.abertas }} ainda em aberto</span></div>
+  <div class="kpi"><small>Taxa de aprovação</small><b>{{ '%.1f'|format(kpi.taxa)|replace('.',',') ~ '%' if kpi.taxa is not none else '—' }}</b><span>aprovadas ÷ (aprovadas + reprovadas)</span></div>
+  <div class="kpi"><small>Aprovadas</small><b>{{ kpi.aprovadas }}</b><span>incl. condicionais</span></div>
+  <div class="kpi vermelho"><small>Reprovados</small><b>{{ kpi.reprovadas }}</b><span><a href="#reprovas">ver motivos</a></span></div>
+  <div class="kpi"><small>Rendas informais</small><b>{{ kpi.proc_informal }}</b><span>processos com renda informal · {{ kpi.comp_informal }} comprador(es)</span></div>
+  <div class="kpi"><small>Rendas formais</small><b>{{ kpi.proc_formal }}</b><span>processos com renda formal · {{ kpi.comp_formal }} comprador(es)</span></div>
+</div>
+
+<div class="cartao">
+  <h2>SLA dos protocolos</h2>
+  <div class="grid2" style="margin-bottom:0">
+    <div class="tabela-wrap"><table class="t">
+      <thead><tr><th>Tipo</th><th class="num">Finalizados</th><th class="num">% no prazo</th><th class="num">SLA médio</th><th class="num">Análise média</th><th class="num">Meta</th></tr></thead>
+      <tbody>
+      {% for k in ['LEAD','MESA','TOTAL'] %}{% set x = sla_geral[k] %}
+        <tr><td>{% if k != 'TOTAL' %}<span class="tipo {{ k }}">{{ k }}</span>{% else %}<b>Total</b>{% endif %}</td><td class="num">{{ x.n }}</td>
+          <td class="num">{% if x.pct is not none %}<span class="sla {{ 'azul' if x.pct >= 90 else ('amarelo' if x.pct >= 75 else 'vermelho') }}">{{ '%.1f'|format(x.pct)|replace('.',',') }}%</span>{% else %}—{% endif %}</td>
+          <td class="num"><b>{{ x.medio|minutos }}</b></td><td class="num">{{ x.analise|minutos }}</td><td class="num muted">{{ (SLA_MIN[k]|string + ' min') if k != 'TOTAL' else '' }}</td></tr>
+      {% endfor %}
+      </tbody></table>
+      {% if distribuidores %}
+      <h3 style="margin:16px 0 6px;font-size:13px;color:var(--suave);text-transform:uppercase">Protocolos distribuídos por</h3>
+      <table class="t"><tbody>
+      {% for d in distribuidores %}<tr><td>{{ d.nome }}</td><td class="num"><b>{{ d.total }}</b></td><td class="num muted">{{ d.mesas }} MESA</td></tr>{% endfor %}
+      </tbody></table>
+      {% endif %}
+    </div>
+    <div>
+      <div class="muted" style="font-size:12px">% concluído no prazo por mês (últimos 12 meses)</div>
+      <div class="colunas">
+        {% for m in sla_mes %}
+        <div class="col" title="{{ m.rotulo }}: {{ ('%.0f'|format(m.pct) ~ '% no prazo, ' ~ m.n ~ ' protocolo(s), média ' ~ (m.medio|minutos)) if m.n else 'sem protocolos' }}">
+          <span class="n">{{ ('%.0f'|format(m.pct)) ~ '%' if m.n }}</span>
+          <div class="b" style="height:{{ m.pct if m.n else 0 }}%;background:{{ 'var(--sla-azul)' if (m.pct or 0) >= 90 else ('var(--sla-amarelo)' if (m.pct or 0) >= 75 else 'var(--sla-vermelho)') }}"></div></div>
+        {% endfor %}
+      </div>
+      <div class="rotulos">{% for m in sla_mes %}<span>{{ m.rotulo }}</span>{% endfor %}</div>
+      <div class="legenda" style="margin-top:8px"><span class="sla azul">≥ 90%</span><span class="sla amarelo">75–89%</span><span class="sla vermelho">&lt; 75%</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="grid3">
+  <div class="cartao">
+    <h2>Análises por mês</h2>
+    <div class="muted" style="font-size:12px;margin-top:-6px">Últimos 12 meses até {{ ate|data }}</div>
+    <div class="colunas">
+      {% for s in serie %}
+      <div class="col" title="{{ s.rotulo }}: {{ s.total }} análise(s)"><span class="n">{{ s.total if s.total }}</span><div class="b" style="height:{{ (s.total / max_mes * 100)|round(1) }}%"></div></div>
+      {% endfor %}
+    </div>
+    <div class="rotulos">{% for s in serie %}<span>{{ s.rotulo }}</span>{% endfor %}</div>
+  </div>
+  <div class="cartao">
+    <h2>Aprovados por mês</h2>
+    <div class="muted" style="font-size:12px;margin-top:-6px">Últimos 12 meses até {{ ate|data }} · inclui condicionais</div>
+    <div class="colunas">
+      {% for s in serie %}
+      <div class="col" title="{{ s.rotulo }}: {{ s.aprovadas }} aprovado(s){% if s.condicionais %}, sendo {{ s.condicionais }} condicional(is){% endif %}"><span class="n">{{ s.aprovadas if s.aprovadas }}</span><div class="b" style="background:var(--verde-esc);height:{{ (s.aprovadas / max_apr * 100)|round(1) }}%"></div></div>
+      {% endfor %}
+    </div>
+    <div class="rotulos">{% for s in serie %}<span>{{ s.rotulo }}</span>{% endfor %}</div>
+  </div>
+  <div class="cartao">
+    <h2>Reprovados por mês</h2>
+    <div class="muted" style="font-size:12px;margin-top:-6px">Últimos 12 meses até {{ ate|data }}</div>
+    <div class="colunas">
+      {% for s in serie %}
+      <div class="col" title="{{ s.rotulo }}: {{ s.reprovadas }} reprovado(s)"><span class="n">{{ s.reprovadas if s.reprovadas }}</span><div class="b" style="background:var(--vermelho);height:{{ (s.reprovadas / max_rep * 100)|round(1) }}%"></div></div>
+      {% endfor %}
+    </div>
+    <div class="rotulos">{% for s in serie %}<span>{{ s.rotulo }}</span>{% endfor %}</div>
+  </div>
+</div>
+
+<div class="grid2">
+  <div class="cartao">
+    <h2>Análises por status</h2>
+    <div class="barras">
+      {% for s, n in por_status %}
+      {% set cls = STATUS_INFO[s][0] %}
+      <div class="barra" title="{{ s }}: {{ n }}"><span><span class="chip st-{{ cls }}">{{ s }}</span></span>
+        <div class="trilho"><div class="fill" style="width:{{ (n / max_status * 100)|round(1) }}%;background:{{ {'aprovado':'var(--verde-esc)','analise':'var(--roxo)','pendente':'var(--sla-amarelo)','reprovado':'var(--vermelho)'}[cls] }}"></div></div>
+        <span class="v">{{ n }}</span></div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="cartao">
+    <h2>Top construtoras</h2>
+    {% if construtoras %}
+    <div class="barras">
+      {% for c in construtoras %}
+      <div class="barra" title="{{ c.nome }}: {{ c.total }} análise(s), {{ c.aprovadas }} aprovada(s)"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.nome }}</span>
+        <div class="trilho"><div class="fill" style="width:{{ (c.total / max_cons * 100)|round(1) }}%;background:var(--magenta)"></div></div>
+        <span class="v">{{ c.total }} <span class="muted" style="font-weight:400">({{ c.aprovadas }} aprov.)</span></span></div>
+      {% endfor %}
+    </div>
+    {% else %}<div class="muted">Sem análises no período.</div>{% endif %}
+  </div>
+</div>
+
+<div class="cartao" style="padding:0">
+  <div style="padding:16px 18px 0"><h2>Desempenho por analista</h2></div>
+  <div class="tabela-wrap">
+  {% if ranking %}
+  <table class="t">
+    <thead><tr><th>#</th><th>Analista</th><th class="num">Análises</th><th class="num">Aprovadas</th><th class="num">Reprovadas</th><th class="num">Em aberto</th>
+      <th class="num">Taxa aprov.</th><th class="num">Análise média</th><th class="num">SLA médio</th><th class="num">% no prazo</th><th style="width:16%"></th></tr></thead>
+    <tbody>
+    {% for e in ranking %}
+      <tr><td class="muted">{{ loop.index }}</td><td><b>{{ e.nome }}</b>{% if e.perfil != 'analista' %} <span class="muted">({{ PERFIS[e.perfil] }})</span>{% endif %}</td>
+        <td class="num">{{ e.total }}</td><td class="num">{{ e.aprovadas }}</td><td class="num">{{ e.reprovadas }}</td><td class="num">{{ e.abertas }}</td>
+        <td class="num">{{ ('%.0f'|format(e.taxa)) ~ '%' if e.taxa is not none else '—' }}</td>
+        <td class="num">{{ e.sla.TOTAL.analise|minutos if e.sla.TOTAL.analise_n else '—' }}</td>
+        <td class="num">{{ e.sla.TOTAL.medio|minutos if e.sla.TOTAL.n else '—' }}</td>
+        <td class="num">{% set p = e.sla.TOTAL.pct %}{% if p is not none %}<span class="sla {{ 'azul' if p >= 90 else ('amarelo' if p >= 75 else 'vermelho') }}">{{ '%.0f'|format(p) }}%</span>{% else %}—{% endif %}</td>
+        <td><div class="mini" title="{{ e.total }} análise(s)"><div style="width:{{ (e.total / max_rank * 100)|round(1) }}%;background:var(--laranja)"></div></div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<div class="vazio">Sem análises no período.</div>{% endif %}
+  </div>
+</div>
+
+<div class="cartao" id="reprovas">
+  <div class="cab" style="margin-bottom:12px">
+    <div><h2 style="margin:0">Reprovados por motivo</h2><div class="muted" style="font-size:12px">{{ kpi.reprovadas }} reprovado(s) no período. Clique num motivo para filtrar a lista.</div></div>
+    <form method="get" class="filtros" action="#reprovas">
+      <input type="hidden" name="de" value="{{ de }}"><input type="hidden" name="ate" value="{{ ate }}">
+      <div><label>Motivo</label><select name="motivo" onchange="this.form.submit()"><option value="">Todos os motivos</option>
+        {% for m, n in por_motivo %}<option {{ 'selected' if motivo_f == m }}>{{ m }}</option>{% endfor %}</select></div>
+    </form>
+  </div>
+  <div class="motivos">
+    {% for m, n in por_motivo %}
+    <a class="motivo {{ 'on' if motivo_f == m }}" href="{{ url_for('relatorios', de=de, ate=ate, motivo=('' if motivo_f == m else m)) }}#reprovas">
+      <small>{{ m }}</small><b>{{ n }}</b>
+      <span>{{ ('%.0f'|format(n / kpi.reprovadas * 100)) ~ '% dos reprovados' if kpi.reprovadas else '—' }}</span>
+      <div class="mini" style="margin-top:8px"><div style="width:{{ (n / max_motivo * 100)|round(1) }}%;background:var(--vermelho)"></div></div>
+    </a>
+    {% endfor %}
+  </div>
+
+  {% if motivo_analista %}
+  <h3 style="margin:4px 0 8px;font-size:13px;color:var(--suave);text-transform:uppercase">Motivos por analista</h3>
+  <div class="tabela-wrap"><table class="t">
+    <thead><tr><th>Analista</th>{% for m, n in por_motivo %}<th class="num">{{ m }}</th>{% endfor %}<th class="num">Total</th></tr></thead>
+    <tbody>
+    {% for nome, cont in motivo_analista|dictsort %}
+      <tr><td><b>{{ nome }}</b></td>{% for m, n in por_motivo %}<td class="num">{{ cont[m] or '—' }}</td>{% endfor %}<td class="num"><b>{{ cont.values()|sum }}</b></td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% endif %}
+
+  <h3 style="margin:16px 0 8px;font-size:13px;color:var(--suave);text-transform:uppercase">
+    {{ motivo_f or 'Todos os motivos' }} · {{ n_lista_reprov }} processo(s){% if n_lista_reprov > 100 %}, mostrando os 100 mais recentes{% endif %}</h3>
+  {% if lista_reprov %}
+  <div class="tabela-wrap"><table class="t">
+    <thead><tr><th>Protocolo</th><th>Emissão</th><th>Compradores</th><th>Empreendimento</th><th>Analista</th><th>Motivo</th><th class="num">Renda familiar</th></tr></thead>
+    <tbody>
+    {% for r in lista_reprov %}
+      <tr class="link" onclick="location.href='{{ url_for('analise_ver', aid=r.id) }}'">
+        <td class="nowrap"><b>{{ r.protocolo or ('nº %s'|format(r.id)) }}</b></td><td class="nowrap">{{ r.emissao|data }}</td>
+        <td>{{ r.compradores or '—' }}</td><td>{{ r.empreendimento or '—' }}</td><td>{{ r.analista_nome }}</td>
+        <td><span class="chip st-reprovado">{{ r.motivo_reprova or 'Não informado' }}</span></td>
+        <td class="num">{{ r.renda_familiar|brl }}</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% else %}<div class="muted">Nenhum reprovado com esse filtro no período.</div>{% endif %}
+</div>
+{% endblock %}

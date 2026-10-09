@@ -1,0 +1,17 @@
+# Dados e segredos: NUNCA versionar (contêm CPF e renda de clientes)
+*.db
+*.db-journal
+.secret_key
+*.csv
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini

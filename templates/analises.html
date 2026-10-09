@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block titulo %}Análises{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>{{ 'Análises de crédito' if NIVEL[usuario.perfil] >= 2 else 'Minhas análises' }}</h1>
+    <div class="muted">{{ rows|length }} registro(s){% if rows|length == 500 %}, mostrando os 500 mais recentes{% endif %}</div></div>
+  <div class="acoes">
+    {% if NIVEL[usuario.perfil] >= 2 %}<a class="btn claro" href="{{ url_for('exportar_csv', de=f.de, ate=f.ate) }}">Exportar CSV</a>{% endif %}
+    {% if NIVEL[usuario.perfil] >= 2 %}<a class="btn claro" href="{{ url_for('analise_nova') }}">Nova análise sem protocolo</a>
+    <a class="btn verde" href="{{ url_for('distribuir') }}">+ Distribuir protocolo</a>{% endif %}
+  </div>
+</div>
+
+<form class="cartao filtros" method="get">
+  <div class="grow"><label>Buscar</label><input name="q" value="{{ f.q }}" placeholder="Protocolo, comprador, CPF, empreendimento ou construtora"></div>
+  <div><label>Status</label><select name="status"><option value="">Todos</option>
+    {% for s in STATUS %}<option {{ 'selected' if f.status==s }}>{{ s }}</option>{% endfor %}</select></div>
+  {% if analistas %}<div><label>Analista</label><select name="analista"><option value="">Todos</option>
+    {% for a in analistas %}<option value="{{ a.id }}" {{ 'selected' if f.analista==a.id|string }}>{{ a.nome }}</option>{% endfor %}</select></div>{% endif %}
+  <div><label>Emissão de</label><input type="date" name="de" value="{{ f.de }}"></div>
+  <div><label>até</label><input type="date" name="ate" value="{{ f.ate }}"></div>
+  <div class="acoes"><button class="btn roxo">Filtrar</button><a class="btn claro" href="{{ url_for('analises') }}">Limpar</a></div>
+</form>
+
+<div class="cartao" style="padding:0">
+  <div class="tabela-wrap">
+  {% if rows %}
+  <table class="t">
+    <thead><tr><th>Protocolo</th><th>SLA</th><th>Emissão</th><th>Compradores</th><th>Empreendimento</th>
+      {% if NIVEL[usuario.perfil] >= 2 %}<th>Analista</th>{% endif %}
+      <th>Status</th><th class="num">Renda familiar</th><th class="num">Total aprovado</th><th>Venc. SICAQ</th><th>Atualizado</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr class="link" onclick="location.href='{{ url_for('analise_ver', aid=r.id) }}'">
+        {% set s = sla(r) %}
+        <td class="nowrap">{% if r.protocolo %}<b>{{ r.protocolo }}</b> <span class="tipo {{ r.tipo }}">{{ r.tipo }}</span>{% else %}<span class="muted">nº {{ r.id }}</span>{% endif %}</td>
+        <td>{% if s %}<span class="sla {{ s.cor }}" title="{{ s.decorrido_min|minutos }}">{{ s.rotulo }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="nowrap">{{ r.emissao|data }}</td>
+        <td><b>{{ r.compradores or '—' }}</b></td>
+        <td>{{ r.empreendimento or '—' }}<div class="muted" style="font-size:12px">{{ r.construtora }}</div></td>
+        {% if NIVEL[usuario.perfil] >= 2 %}<td>{{ r.analista_nome }}</td>{% endif %}
+        <td><span class="chip st-{{ STATUS_INFO[r.status][0] }}">{{ r.status }}</span></td>
+        <td class="num">{{ r.renda_familiar|brl }}</td><td class="num"><b>{{ r.total_aprovado|brl }}</b></td>
+        <td class="nowrap">{{ r.vencimento_sicaq|data }}</td><td class="nowrap muted">{{ r.atualizado_em|datahora }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<div class="vazio">Nenhuma análise encontrada.</div>{% endif %}
+  </div>
+</div>
+{% endblock %}

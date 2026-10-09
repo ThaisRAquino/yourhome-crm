@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titulo %}Entrar{% endblock %} · Your Home</title>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=VERSAO) }}">
+</head>
+<body>
+<div class="login-bg">
+  <div class="login">
+    <div class="marca-l">
+      {% if logo_existe %}<img src="{{ url_for('static', filename='logo.png') }}" alt="Your Home">
+      {% else %}<b>Your Home</b><span>CRÉDITO IMOBILIÁRIO</span>{% endif %}
+    </div>
+    {% for cat, msg in get_flashed_messages(with_categories=true) %}
+      <div class="flash {{ cat }}">{{ msg }}</div>
+    {% endfor %}
+    {% block conteudo %}{% endblock %}
+  </div>
+</div>
+<script>
+document.querySelectorAll('input[data-cpf]').forEach(i=>i.addEventListener('input',()=>{
+  const d=i.value.replace(/\D/g,'').slice(0,11);
+  i.value=d.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2');
+}));
+</script>
+</body>
+</html>

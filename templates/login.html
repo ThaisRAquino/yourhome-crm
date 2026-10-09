@@ -1,0 +1,12 @@
+{% extends "login_base.html" %}
+{% block conteudo %}
+<form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="campo"><label for="cpf">CPF</label>
+    <input id="cpf" name="cpf" data-cpf inputmode="numeric" autocomplete="username" placeholder="000.000.000-00" required autofocus></div>
+  <div class="campo"><label for="senha">Senha</label>
+    <input id="senha" name="senha" type="password" autocomplete="current-password" required></div>
+  <button class="btn verde">Entrar</button>
+</form>
+<p class="dica">Primeiro acesso? Use a senha padrão informada pelo seu gestor.<br>Esqueceu a senha? Peça ao seu supervisor para redefinir.</p>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block titulo %}Excluir usuário{% endblock %}
+{% block conteudo %}
+<div class="cab"><div><a href="{{ url_for('usuarios') }}">← Usuários</a><h1>Excluir usuário</h1></div></div>
+<form method="post" class="fsec" style="max-width:640px;border-left-color:var(--vermelho)">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <p style="margin-top:0"><b>{{ u.nome }}</b> · {{ PERFIS[u.perfil] }} · CPF {{ u.cpf|cpf }}</p>
+  <p class="muted">A exclusão é definitiva: o login deixa de existir. O histórico das análises continua registrado com o nome da pessoa.
+    Se só precisa bloquear o acesso, use <b>Desativar</b>.</p>
+  <div class="fg" style="grid-template-columns:1fr">
+    {% if n %}
+    <div><label>{{ n }} análise(s) deste usuário{% if abertas %} ({{ abertas }} em aberto){% endif %} vão para</label>
+      <select name="destino_id" required><option value="">Escolha…</option>
+        {% for d in destinos %}<option value="{{ d.id }}">{{ d.nome }} ({{ PERFIS[d.perfil] }})</option>{% endfor %}</select></div>
+    {% endif %}
+    <div><label>Para confirmar, digite o CPF de {{ u.nome.split(' ')[0] }}</label><input name="confirma_cpf" inputmode="numeric" required autocomplete="off"></div>
+  </div>
+  <div class="acoes" style="margin-top:16px"><button class="btn" style="background:var(--vermelho)">Excluir definitivamente</button>
+    <a class="btn claro" href="{{ url_for('usuarios') }}">Cancelar</a></div>
+</form>
+{% endblock %}

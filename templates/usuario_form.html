@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Editar usuário' if u else 'Novo usuário' }}{% endblock %}
+{% block conteudo %}
+<div class="cab"><div><a href="{{ url_for('usuarios') }}">← Usuários</a><h1>{{ 'Editar usuário' if u else 'Novo usuário' }}</h1></div></div>
+<form method="post" class="fsec roxo" style="max-width:640px">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="fg" style="grid-template-columns:1fr 1fr">
+    <div class="w2" style="grid-column:span 2"><label>Nome completo</label><input name="nome" required value="{{ f.nome or (u.nome if u else '') }}"></div>
+    <div><label>CPF (será o login)</label><input name="cpf" id="cpf" inputmode="numeric" required value="{{ f.cpf or ((u.cpf|cpf) if u else '') }}"></div>
+    <div><label>Perfil</label><select name="perfil" {{ 'style=pointer-events:none;background:var(--campo) tabindex=-1' if opcoes|length == 1 and u }}>
+      {% set atual = f.perfil or (u.perfil if u else 'analista') %}
+      {% for p in opcoes %}<option value="{{ p }}" {{ 'selected' if p==atual }}>{{ PERFIS[p] }}</option>{% endfor %}</select></div>
+    <div style="grid-column:span 2"><label>E-mail (opcional)</label><input name="email" type="email" value="{{ f.email or (u.email if u else '') }}"></div>
+  </div>
+  {% if not u %}<p class="muted" style="margin:14px 0 0">A senha inicial será <b>abc123</b>. No primeiro acesso, o sistema pede a troca por uma senha pessoal.</p>{% endif %}
+  <div class="acoes" style="margin-top:16px"><button class="btn">Salvar</button><a class="btn claro" href="{{ url_for('usuarios') }}">Cancelar</a></div>
+</form>
+<p class="muted" style="font-size:12px;max-width:640px"><b>O que cada perfil vê:</b> o Analista vê e edita só as próprias análises. Supervisor e Gerente veem todas as análises, o Painel da equipe e gerenciam usuários. O Diretor vê tudo isso e mais os Relatórios gerais e o backup.</p>
+{% endblock %}
+{% block scripts %}
+<script>
+const i=document.getElementById('cpf');i.addEventListener('input',()=>{const d=i.value.replace(/\D/g,'').slice(0,11);
+i.value=d.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2')});
+</script>
+{% endblock %}

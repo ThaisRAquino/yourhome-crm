@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block titulo %}Usuários{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>Usuários</h1><div class="muted">Login com o CPF. Senha inicial <b>abc123</b>, com troca obrigatória no primeiro acesso.</div></div>
+  <a class="btn verde" href="{{ url_for('usuario_form') }}">+ Novo usuário</a>
+</div>
+<div class="cartao" style="padding:0"><div class="tabela-wrap">
+<table class="t">
+  <thead><tr><th>Nome</th><th>CPF (login)</th><th>Perfil</th><th>Situação</th><th class="num">Análises</th><th>Último acesso</th><th></th></tr></thead>
+  <tbody>
+  {% for u in rows %}
+    <tr>
+      <td><b>{{ u.nome }}</b>{% if u.email %}<div class="muted" style="font-size:12px">{{ u.email }}</div>{% endif %}</td>
+      <td class="nowrap">{{ u.cpf|cpf }}</td>
+      <td>{{ PERFIS[u.perfil] }}</td>
+      <td>{% if not u.ativo %}<span class="chip inativo">Desativado</span>
+          {% elif u.trocar_senha %}<span class="chip st-pendente">Aguardando 1º acesso</span>
+          {% else %}<span class="chip st-aprovado">Ativo</span>{% endif %}</td>
+      <td class="num">{{ u.n }}</td>
+      <td class="muted nowrap">{{ u.ultimo_acesso|datahora }}</td>
+      <td>
+        {% if pode_editar(u.perfil) and not pode_gerir(u.perfil) and u.id != usuario.id %}
+        <div class="acoes" style="justify-content:flex-end">
+          <a class="btn claro peq" href="{{ url_for('usuario_form', uid=u.id) }}">Editar</a>
+        </div>
+        {% elif pode_gerir(u.perfil) and u.id != usuario.id %}
+        <div class="acoes" style="justify-content:flex-end">
+          <a class="btn claro peq" href="{{ url_for('usuario_form', uid=u.id) }}">Editar</a>
+          <form method="post" action="{{ url_for('usuario_resetar', uid=u.id) }}" onsubmit="return confirm('Redefinir a senha de {{ u.nome }} para abc123?')">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn claro peq">Redefinir senha</button></form>
+          <form method="post" action="{{ url_for('usuario_ativo', uid=u.id) }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn claro peq">{{ 'Desativar' if u.ativo else 'Reativar' }}</button></form>
+          <a class="btn perigo peq" href="{{ url_for('usuario_excluir', uid=u.id) }}">Excluir</a>
+        </div>
+        {% elif u.id == usuario.id %}<span class="muted" style="font-size:12px">Você</span>{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div></div>
+<p class="muted" style="font-size:12px">
+  {% if usuario.perfil == 'supervisor' %}Como supervisor, você gerencia analistas.
+  {% elif usuario.perfil == 'gerente' %}Como gerente, você gerencia analistas e supervisores e pode editar os dados do diretor.
+  {% else %}Como diretor, você gerencia todos os perfis.{% endif %}
+  <b>Desativar</b> bloqueia o acesso e mantém tudo. <b>Excluir</b> apaga o usuário de vez: as análises dele passam para outra pessoa e o histórico continua registrado.
+</p>
+{% endblock %}

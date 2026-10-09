@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titulo %}CRM{% endblock %} · Your Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=VERSAO) }}">
+</head>
+<body>
+{% macro marca() -%}
+  {% if logo_existe %}<img src="{{ url_for('static', filename='logo.png') }}" alt="Your Home">
+  {% else %}<span class="wm"><b>Your Home</b><span>CRÉDITO IMOBILIÁRIO</span></span>{% endif %}
+{%- endmacro %}
+{% if usuario and not usuario.trocar_senha %}
+<div class="faixa-topo"><span>CRM de Análises de Crédito</span><span>Your Home · Crédito Imobiliário</span></div>
+<header class="topo">
+  <a class="marca" href="{{ url_for('inicio') }}">{{ marca() }}</a>
+  {% set ep = request.endpoint or '' %}
+  <nav class="menu">
+    {% if usuario.perfil == 'diretor' %}<a href="{{ url_for('relatorios') }}" class="{{ 'on' if ep=='relatorios' }}">Relatórios</a>{% endif %}
+    {% if NIVEL[usuario.perfil] >= 2 %}<a href="{{ url_for('painel') }}" class="{{ 'on' if ep=='painel' }}">Painel da equipe</a>{% endif %}
+    <a href="{{ url_for('fila') }}" class="{{ 'on' if ep=='fila' }}">{{ 'Fila (SLA)' if NIVEL[usuario.perfil] >= 2 else 'Minha fila' }}</a>
+    {% if NIVEL[usuario.perfil] >= 2 %}<a href="{{ url_for('distribuir') }}" class="{{ 'on' if ep=='distribuir' }}">Distribuir protocolo</a>{% endif %}
+    <a href="{{ url_for('analises') }}" class="{{ 'on' if ep.startswith('analise') }}">{{ 'Análises' if NIVEL[usuario.perfil] >= 2 else 'Minhas análises' }}</a>
+    {% if NIVEL[usuario.perfil] >= 2 %}<a href="{{ url_for('usuarios') }}" class="{{ 'on' if ep.startswith('usuario') }}">Usuários</a>{% endif %}
+  </nav>
+  <div class="quem">
+    <span>{{ usuario.nome.split(' ')[0] }}</span>
+    <span class="pf">{{ PERFIS[usuario.perfil] }}</span>
+    <a href="{{ url_for('trocar_senha') }}">Alterar senha</a>
+    <a href="{{ url_for('logout') }}">Sair</a>
+  </div>
+</header>
+{% endif %}
+<main class="wrap">
+  {% for cat, msg in get_flashed_messages(with_categories=true) %}
+    <div class="flash {{ cat }}">{{ msg }}</div>
+  {% endfor %}
+  {% block conteudo %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

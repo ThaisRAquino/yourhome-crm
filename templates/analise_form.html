@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Editar análise nº %s'|format(a.id) if a else 'Nova análise' }}{% endblock %}
+{% macro campo(label, name, value, cls='', tipo='text', extra='') -%}
+<div class="{{ cls }}"><label>{{ label }}</label><input type="{{ tipo }}" name="{{ name }}" value="{{ value if value is not none }}" {{ extra|safe }}></div>
+{%- endmacro %}
+{% macro dinheiro(label, name, value, cls='') -%}
+<div class="{{ cls }}"><label>{{ label }}</label><input name="{{ name }}" inputmode="decimal" data-money value="{{ value|brlnum }}"></div>
+{%- endmacro %}
+{% macro escolha(label, name, value, opcoes, cls='') -%}
+<div class="{{ cls }}"><label>{{ label }}</label><select name="{{ name }}">{% for o in opcoes %}<option {{ 'selected' if o==value }}>{{ o }}</option>{% endfor %}</select></div>
+{%- endmacro %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>{{ 'Editar análise nº %s'|format(a.id) if a else 'Nova análise' }}</h1>
+  {% if a %}<div class="muted">Analista responsável: {{ a.analista_nome }}</div>{% endif %}</div>
+  <div class="acoes">{% if a %}<a class="btn claro" href="{{ url_for('analise_ver', aid=a.id) }}">Ver relatório</a>{% endif %}</div>
+</div>
+
+<form method="post" id="form">
+<input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+{% set s = sla(a) if a else none %}
+{% if NIVEL[usuario.perfil] >= 2 %}
+<div class="fsec magenta"><h3>Protocolo (Anapro)</h3><div class="fg">
+  {{ campo('Nº do protocolo','protocolo',a.protocolo if a else '') }}
+  {% set sol = (a.solicitado_em or '')[:16]|replace(' ','T') if a else '' %}
+  {{ campo('Solicitado em','solicitado_em',sol,tipo='datetime-local') }}
+  {{ escolha('Tipo','tipo',(a.tipo if a and a.tipo else 'LEAD'),['LEAD','MESA']) }}
+  <div><label>SLA</label>{% if s %}<div style="padding-top:8px"><span class="sla {{ s.cor }}">{{ s.rotulo }}</span> <span class="muted">{{ s.decorrido_min|minutos }}</span></div>{% else %}<input readonly value="Sem horário de solicitação">{% endif %}</div>
+</div></div>
+{% elif a and a.protocolo %}
+<div class="fsec magenta"><h3>Protocolo {{ a.protocolo }} <span class="tipo {{ a.tipo }}">{{ a.tipo }}</span></h3>
+  <div class="muted">Solicitado {{ a.solicitado_em|hora }}{% if a.distribuidor_nome %} · distribuído por <b>{{ a.distribuidor_nome }}</b>{% endif %}
+  {% if s %} · <span class="sla {{ s.cor }}">{{ s.rotulo }}</span>{% endif %}</div>
+  {% if s and not s.concluido %}<div class="muted" style="margin-top:6px;font-size:12px">Quando terminar, escolha o parecer no campo Status e clique em <b>Finalizar análise</b>. Isso para o tempo de análise e o SLA.</div>{% endif %}
+</div>
+{% endif %}
+
+{% if a and (a.solicitado_em or a.iniciado_em) %}
+{% set t = tempo_analise(a) %}
+<div class="cronos">
+  {% if s %}<div class="crono {{ s.cor }}" data-rest="{{ s.restante_seg }}" data-aviso="{{ s.aviso_seg }}" {{ 'data-parado' if s.concluido }}>
+    <small>SLA {{ s.tipo }} ({{ s.prazo_min }} min)</small><b class="t">{{ s.decorrido_min|minutos }}</b><span class="st">{{ s.rotulo }}</span></div>{% endif %}
+  {% if t %}<div class="crono roxo" data-an="{{ t.segundos }}" {{ 'data-parado' if not t.em_andamento }}>
+    <small>Tempo de análise</small><b class="t">{{ t.minutos|minutos }}</b><span class="st">{{ 'em andamento desde ' ~ (a.iniciado_em|hora) if t.em_andamento else 'finalizada' }}</span></div>{% endif %}
+  {% if a.concluido_em %}<div class="muted" style="align-self:center">Finalizada em {{ a.concluido_em|datahora }}. Você ainda pode corrigir dados; os tempos não mudam.</div>{% endif %}
+</div>
+{% endif %}
+
+<div class="fsec"><h3>Análise</h3><div class="fg">
+  {{ campo('Emissão','emissao',emissao,tipo='date') }}
+  {{ escolha('Status (parecer)','status',status,STATUS) }}
+  <div id="boxMotivo" {{ 'hidden' if status != 'Reprovado' }}><label>Motivo da reprova</label>
+    <select name="motivo_reprova" id="motivo"><option value="">Selecione…</option>
+      {% for m in MOTIVOS_REPROVA %}<option {{ 'selected' if m == motivo }}>{{ m }}</option>{% endfor %}</select></div>
+  {% if NIVEL[usuario.perfil] >= 2 %}
+  <div class="w2"><label>Analista responsável</label><select name="analista_id">
+    {% for u in analistas %}<option value="{{ u.id }}" {{ 'selected' if u.id==analista_id }}>{{ u.nome }} ({{ PERFIS[u.perfil] }}{{ ', desativado' if not u.ativo }})</option>{% endfor %}</select></div>
+  {% else %}
+  <div class="w2"><label>Analista responsável</label><input readonly value="{{ a.analista_nome if a else usuario.nome }}"></div>
+  {% endif %}
+</div></div>
+
+<div class="fsec"><h3>Dados do imóvel</h3><div class="fg">
+  {{ campo('Construtora','imovel_construtora',d.imovel.construtora,'w2') }}
+  {{ campo('Empreendimento','imovel_empreendimento',d.imovel.empreendimento,'w2') }}
+  {{ campo('Torre','imovel_torre',d.imovel.torre) }}
+  {{ campo('UH','imovel_uh',d.imovel.uh) }}
+  {{ campo('Inclusão','imovel_inclusao',d.imovel.inclusao,tipo='date') }}
+  {{ dinheiro('Valor de avaliação (R$)','imovel_avaliacao',d.imovel.avaliacao) }}
+  {{ campo('Corretor','imovel_corretor',d.imovel.corretor,'w2') }}
+  {{ campo('Gerente','imovel_gerente',d.imovel.gerente,'w2') }}
+  {{ campo('Superintendente','imovel_superintendente',d.imovel.superintendente,'w2') }}
+  {{ campo('Diretor','imovel_diretor',d.imovel.diretor,'w2') }}
+</div></div>
+
+<div class="fsec roxo"><h3>Compradores</h3>
+  <div id="compradores">
+  {% for c in d.compradores %}
+    <div class="comprador">
+      <div class="hd"><span class="tit">Comprador {{ loop.index }}</span><button type="button" class="btn perigo peq rm">Remover</button></div>
+      <div class="fg">
+        {{ campo('Nome','c_nome',c.nome,'w2') }}
+        {{ campo('CPF','c_cpf',c.cpf|cpf,extra='data-cpf inputmode="numeric"') }}
+        {{ campo('Nascimento','c_nasc',c.nascimento,tipo='date') }}
+        {{ dinheiro('Renda formal (R$)','c_formal',c.formal) }}
+        {{ dinheiro('Renda informal (R$)','c_informal',c.informal) }}
+        <div class="w2"><label>Renda total</label><input readonly class="rt" value="{{ c.renda|brl }}"></div>
+      </div>
+    </div>
+  {% endfor %}
+  </div>
+  <div class="fg">
+    <div><label>&nbsp;</label><button type="button" class="btn claro" id="addC">+ Adicionar comprador</button></div>
+    <div><label>Renda familiar</label><input readonly id="rf" value="{{ d.renda_familiar|brl }}"></div>
+    {{ campo('Faixa (ex.: HIS2)','faixa',d.faixa) }}
+  </div>
+</div>
+
+<div class="fsec magenta"><h3>Condições de financiamento</h3><div class="fg">
+  {{ dinheiro('Financiamento (R$)','fin_financiamento',d.fin.financiamento) }}
+  {{ dinheiro('FGTS (R$)','fin_fgts',d.fin.fgts) }}
+  {{ dinheiro('Subsídio (R$)','fin_subsidio',d.fin.subsidio) }}
+  {{ dinheiro('Cheque / próprios (R$)','fin_proprios',d.fin.proprios) }}
+  {{ dinheiro('Parcela mensal (R$)','fin_parcela',d.fin.parcela) }}
+  <div><label>Total aprovado</label><input readonly id="ta" value="{{ d.total_aprovado|brl }}"></div>
+  {{ campo('Vencimento SICAQ','fin_vencimento',d.fin.vencimento,tipo='date') }}
+  {{ campo('Prazo (meses)','fin_prazo',d.fin.prazo,tipo='number',extra='min="0" max="480"') }}
+  {{ escolha('Amortização','fin_amortizacao',d.fin.amortizacao,['PRICE','SAC']) }}
+  {{ campo('Enquadramento','fin_enquadramento',d.fin.enquadramento) }}
+  {{ campo('Taxa de juros','fin_taxa',d.fin.taxa,extra='placeholder="7,93% a.a."') }}
+  <div></div>
+  {{ escolha('36 meses?','fin_meses36',d.fin.meses36,['Sim','Não']) }}
+  {{ escolha('Dependente?','fin_dependente',d.fin.dependente,['Sim','Não']) }}
+</div></div>
+
+<div class="fsec verde"><h3>Pesquisas / Compliance</h3><div class="fg">
+  {{ escolha('Serasa','comp_serasa',d.compliance.serasa,COMPLIANCE) }}
+  {{ escolha('CADMUT','comp_cadmut',d.compliance.cadmut,COMPLIANCE) }}
+  {{ escolha('CIWEB','comp_ciweb',d.compliance.ciweb,COMPLIANCE) }}
+  {{ escolha('Subsídio','comp_subsidio',d.compliance.subsidio,COMPLIANCE) }}
+  <div class="w4"><label>Observações / condicionantes</label><textarea name="obs" rows="4">{{ d.obs }}</textarea></div>
+</div></div>
+
+<div class="barra-salvar">
+  <a class="btn claro" href="{{ url_for('analise_ver', aid=a.id) if a else url_for('analises') }}">Cancelar</a>
+  <button class="btn claro" name="acao" value="salvar">Salvar</button>
+  {% if not (a and a.concluido_em) %}<button class="btn verde" name="acao" value="finalizar" id="btnFin">✓ Finalizar análise</button>{% endif %}
+</div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+const money=s=>{s=String(s||'').replace(/R\$|\s/g,'');if(!s)return 0;
+  if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');else if(/^\d{1,3}(\.\d{3})+$/.test(s))s=s.replace(/\./g,'');
+  const n=parseFloat(s);return isNaN(n)?0:n};
+const brl=v=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const box=document.getElementById('compradores');
+function recalcula(){
+  let fam=0;
+  box.querySelectorAll('.comprador').forEach((c,i)=>{
+    const r=money(c.querySelector('[name=c_formal]').value)+money(c.querySelector('[name=c_informal]').value);
+    fam+=r;c.querySelector('.rt').value=brl(r);c.querySelector('.tit').textContent='Comprador '+(i+1);
+    c.querySelector('.rm').style.visibility=box.children.length>1?'visible':'hidden';
+  });
+  document.getElementById('rf').value=brl(fam);
+  const t=['financiamento','fgts','subsidio','proprios'].reduce((s,k)=>s+money(document.querySelector('[name=fin_'+k+']').value),0);
+  document.getElementById('ta').value=brl(t);
+}
+function mascaraCPF(i){const d=i.value.replace(/\D/g,'').slice(0,11);
+  i.value=d.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2')}
+document.getElementById('form').addEventListener('input',e=>{
+  if(e.target.matches('[data-cpf]'))mascaraCPF(e.target);
+  if(e.target.matches('[data-money]'))recalcula();
+});
+document.getElementById('form').addEventListener('focusout',e=>{
+  if(e.target.matches('[data-money]')&&e.target.value.trim())
+    e.target.value=money(e.target.value).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+});
+box.addEventListener('click',e=>{if(e.target.classList.contains('rm')&&box.children.length>1){e.target.closest('.comprador').remove();recalcula()}});
+document.getElementById('addC').onclick=()=>{
+  const n=box.firstElementChild.cloneNode(true);
+  n.querySelectorAll('input').forEach(i=>{i.value=i.hasAttribute('data-money')?'0,00':''});
+  box.appendChild(n);recalcula();n.querySelector('[name=c_nome]').focus();
+};
+recalcula();
+
+// motivo da reprova obrigatório
+const st=document.querySelector('[name=status]'),bm=document.getElementById('boxMotivo'),mo=document.getElementById('motivo');
+function vm(){const r=st.value==='Reprovado';bm.hidden=!r;mo.required=r;}
+st.addEventListener('change',vm);vm();
+const bf=document.getElementById('btnFin');
+if(bf)bf.addEventListener('click',e=>{
+  if(st.value==='Em análise'){e.preventDefault();alert('Para finalizar, escolha o parecer no campo Status.');st.focus();return}
+  if(!confirm('Finalizar a análise com o parecer "'+st.value+'"? O tempo de análise e o SLA param de contar.'))e.preventDefault();
+});
+
+// cronômetros
+const pad=n=>String(n).padStart(2,'0');
+const fmt=s=>{s=Math.abs(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return (h?h+':'+pad(m):m)+':'+pad(x)};
+function tick(){document.querySelectorAll('.crono').forEach(c=>{
+  if(c.hasAttribute('data-parado'))return;
+  if(c.dataset.rest!==undefined){const r=+c.dataset.rest,av=+c.dataset.aviso;
+    c.classList.remove('azul','amarelo','vermelho');c.classList.add(r<0?'vermelho':(r<=av?'amarelo':'azul'));
+    c.querySelector('.t').textContent=(r<0?'+':'')+fmt(r);c.querySelector('.st').textContent=r<0?'Atrasado':(r<=av?'Prestes a atrasar':'Restante');c.dataset.rest=r-1;}
+  if(c.dataset.an!==undefined){const a=+c.dataset.an;c.querySelector('.t').textContent=fmt(a);c.dataset.an=a+1;}
+})}
+tick();setInterval(tick,1000);
+</script>
+{% endblock %}
